@@ -1,0 +1,24 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const pattern = new RegExp('^https?://(?:www[.])?google[.](?:com|cat|[a-z]{2}|(?:com|co)[.][a-z]{2})/search(?:[?#].*)?$');
+const nl=String.fromCharCode(10);
+const domains=fs.readFileSync('tests/google-domains.txt','utf8').trim().split(nl).map(d=>d.trim().slice(1));
+let accepted=0;
+for(const d of domains) for(const s of ['http','https']) for(const p of ['','www.']) for(const t of ['','?q=test','?q=test&start=10','#results']) {assert(pattern.test(s+'://'+p+d+'/search'+t),d);accepted++;}
+const rejected=['https://google.com.evil.com/search','https://evil.com/?https://google.com/search','https://notgoogle.com/search','https://google.com/searching','https://google.com/search/other','https://google.com/maps','https://google.com/','https://accounts.google.com/search','https://google.com@evil.com/search','ftp://google.com/search'];
+for(const u of rejected) assert(!pattern.test(u),u);
+const file='clean-google-search.user.js';
+const before=fs.readFileSync(file,'utf8');
+const end='// ==/UserScript==';
+const pos=before.indexOf(end);
+assert(pos>=0);
+const body=before.slice(pos);
+const rule='// @include      '+pattern.toString();
+const header=before.slice(0,pos).split(nl).filter(l=>!l.startsWith('// @match')&&!l.startsWith('// @include')).map(l=>l.startsWith('// @run-at')?rule+nl+l:l).join(nl);
+const after=header+body;
+assert.equal(after.slice(after.indexOf(end)),body);
+fs.writeFileSync(file,after);
+const gen='tests/update-metadata.cjs';
+const g=fs.readFileSync(gen,'utf8');
+fs.writeFileSync(gen,g.replace("...domains.map(d => '// @match        *://*.' + d + '/search*'),",JSON.stringify(rule)+','));
+console.log(JSON.stringify({domains:domains.length,accepted,rejected:rejected.length,runtimeUnchanged:true}));

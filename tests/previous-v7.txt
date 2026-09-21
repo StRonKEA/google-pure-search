@@ -1,0 +1,94 @@
+// ==UserScript==
+// @name         Google Clean Search (Tamamen Güvenli)
+// @namespace    http://tampermonkey.net/
+// @version      7.0
+// @description  Google "Tümü" sekmesinde AI Overview kutusunu ve sekmesini güvenle gizler; film kartlarını, bilgi panellerini ve sayfayı ASLA bozmaz. Otomatik çevrilen başlık/özetleri orijinal İngilizceye döndürür.
+// @match        *://*.google.com/search*
+// @match        *://*.google.com.tr/search*
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==
+
+(function () {
+  'use strict';
+
+  // 1. CSS: Sadece AI kutusunun doğrudan kimliği ve AI butonu gizlenir.
+  // DİKKAT: div:has(...) veya genel sınıflar kesinlikle kullanılmaz (tüm sayfayı gizleme riski taşımaz).
+  const style = document.createElement('style');
+  style.textContent = `
+    /* Doğrudan AI kutusu ID'si */
+    #eKIzJc,
+    /* AI başlığı */
+    h3.MheKwc,
+    /* Sekmelerdeki AI Modu arama butonu */
+    a[href*="udm=50"],
+    a:has(span[jsname="KliEFc"]),
+    /* Google Çeviri alt bilgi çubuğu */
+    div[jscontroller="Vxh2ib"] {
+      display: none !important;
+    }
+  `;
+  (document.head || document.documentElement).appendChild(style);
+
+  // 2. Çevirileri orijinal İngilizceye döndür ve AI kutusunu DOM'dan kaldır
+  function cleanAndRestore() {
+    // a) Google'ın yerleşik "Orijinali göster" butonunu otomatik tetikle
+    document.querySelectorAll('[jsaction*="YjLrZe"]').forEach((btn) => {
+      if (btn.textContent.includes('Orijinali göster') || btn.textContent.includes('Show original')) {
+        btn.click();
+      }
+    });
+
+    // b) DOM düzeyinde gizlenmiş orijinal başlık ve özetleri görünür yap
+    document.querySelectorAll('.MjjYud').forEach((container) => {
+      // Başlık
+      const origTitle = container.querySelector('a[data-tli][lang="en"], a[data-tli][style*="display:none"]');
+      const transTitle = container.querySelector('a[data-tli]:not([lang="en"]):not([style*="display:none"])');
+      if (origTitle && transTitle && origTitle !== transTitle) {
+        transTitle.style.display = 'none';
+        origTitle.style.display = 'inline';
+      }
+
+      // Özet
+      const origSnippet = container.querySelector('.Pa9Ggf[lang="en"], .Pa9Ggf[style*="display:none"]');
+      const transSnippet = container.querySelector('.Pa9Ggf:not([lang="en"]):not([style*="display:none"])');
+      if (origSnippet && transSnippet && origSnippet !== transSnippet) {
+        transSnippet.style.display = 'none';
+        origSnippet.style.display = 'inline';
+      }
+    });
+
+    // c) Google Translate yönlendirmeli linkleri temizle
+    document.querySelectorAll('a[href*="translate.google.com/translate?"]').forEach((link) => {
+      try {
+        const u = new URL(link.href).searchParams.get('u');
+        if (u) link.href = u;
+      } catch (e) {}
+    });
+
+    // d) Yalnızca AI kutusunu DOM'dan kaldır (sayfa ana taşıyıcılarına dokunmaz)
+    const aiBox = document.getElementById('eKIzJc');
+    if (aiBox) {
+      try { aiBox.remove(); } catch (e) {}
+    }
+
+    const aiTab = document.querySelector('a[href*="udm=50"]');
+    if (aiTab) {
+      try { aiTab.remove(); } catch (e) {}
+    }
+  }
+
+  // Dinamik yüklenen sonuçlar ve sonsuz kaydırma için observer
+  const observer = new MutationObserver(() => cleanAndRestore());
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      cleanAndRestore();
+      observer.observe(document.body, { childList: true, subtree: true });
+    });
+  } else {
+    cleanAndRestore();
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+})();
+
